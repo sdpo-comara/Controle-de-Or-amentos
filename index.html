@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Controle de Orçamentos</title>
+<meta name="description" content="Consulta e acompanhamento de orçamentos, com histórico de revisões.">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">CO</div>
+    <div><b>Controle de Orçamentos</b><small>Consulta e revisões</small></div>
+  </div>
+  <span id="lock" class="lock"><i></i><span>Consulta pública</span></span>
+  <nav class="tabs tabs-desktop" id="nav-desktop" aria-label="Menu principal"></nav>
+</header>
+<div id="banner"></div>
+<main id="view" aria-live="polite"></main>
+<nav class="tabbar" id="nav-mobile" aria-label="Menu principal"></nav>
+<dialog id="dlg" aria-labelledby="dlg-title"></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<noscript><p style="padding:20px">Ative o JavaScript para usar o sistema.</p></noscript>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
