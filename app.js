@@ -30,20 +30,43 @@ function parseBRL(t) {
 }
 const money2 = n => Number(n).toFixed(2).replace('.', ',');
 
+/* Datas e dias úteis (usados pelo Acompanhamento) */
+const pad2 = n => String(n).padStart(2, '0');
+const isoD = d => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+const addD = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return isoD(d); };
+const difD = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
+const ehUtil = (iso, fer) => { const w = new Date(iso + 'T12:00:00Z').getUTCDay(); return w > 0 && w < 6 && !fer.has(iso); };
+const somaDU = (ini, n, fer) => { let d = ini, k = 0; while (k < n) { d = addD(d, 1); if (ehUtil(d, fer)) k++; } return d; };
+const ETAPAS = [['demanda', 'Demanda recebida'], ['definicao', 'Definição do produto'], ['elaboracao', 'Elaboração'], ['revisao', 'Revisão'], ['conferencia', 'Conferência'], ['aprovacao', 'Aprovação'], ['disponibilizada', 'Disponibilizada']];
+const ETN = Object.fromEntries(ETAPAS);
+const ELAB = { '2.5.1': 'Relação de serviços', '2.5.2': 'Quantitativos', '2.5.3': 'Estrutura analítica (EAP)', '2.5.4': 'Bases referenciais de preço', '2.5.5': 'Pesquisa de preço de mercado', '2.5.6': 'Mobilização e desmobilização', '2.5.7': 'Compatibilização das bases', '2.5.8': 'Administração local', '2.5.9': 'Cálculo do BDI', '2.5.10': 'Relatório Técnico de Orçamento' };
+const PRODUTOS = { etp: 'Estudo Técnico Preliminar', anteprojeto: 'Anteprojeto', pbpe_direta: 'Projeto Básico/Executivo (execução direta)', pbpe_indireta: 'Projeto Básico/Executivo (execução indireta)', pregao: 'Pregão (aquisição)', reajuste: 'Reajuste contratual', repactuacao: 'Repactuação contratual' };
+const NIVEIS = ['Projeto Básico', 'Estudo Técnico Preliminar', 'Anteprojeto', 'Projeto Executivo'];
+const FINS = ['Projeto para licitação', 'Análise de viabilidade', 'Projeto para execução', 'Análise de reajuste contratual', 'Análise de repactuação contratual'];
+const OBJETOS = ['Obra ou serviço de engenharia', 'Aquisição (pregão)'];
+const REGIMES = ['Preço global (EPG)', 'Preço unitário (EPU)', 'Integral (EI)', 'Por tarefa (ET)', 'Contratação integrada (CI)', 'Semi-integrada (CSI)'];
+const PRIOS = ['a definir', 'Alta', 'Média', 'Baixa'];
+const PECA_ST = { pendente: 'Pendente', conferida: 'Conferida', nao_se_aplica: 'Não se aplica' };
+const produtoDe = (nivel, fim, exec, obj) => /reajuste/i.test(fim || '') ? 'reajuste' : /repactua/i.test(fim || '') ? 'repactuacao'
+  : nivel === 'Estudo Técnico Preliminar' ? 'etp' : nivel === 'Anteprojeto' ? 'anteprojeto' : /Aquisi/.test(obj || '') ? 'pregao'
+  : exec === 'Indireta' ? 'pbpe_indireta' : exec === 'Direta' ? 'pbpe_direta' : '';
+
 const ICON = {
   painel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>',
   consultar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   cadastrar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   historico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>',
+  acompanhamento: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>',
   administracao: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
 };
 const NAV = [
   { id: 'painel', label: 'Painel inicial', short: 'Painel' },
   { id: 'consultar', label: 'Consultar orçamentos', short: 'Consultar' },
   { id: 'cadastrar', label: 'Cadastrar orçamento', short: 'Cadastrar', admin: true },
+  { id: 'acompanhamento', label: 'Acompanhamento', short: 'Acomp.', ac: true },
   { id: 'historico', label: 'Histórico de revisões', short: 'Revisões' },
   { id: 'administracao', label: 'Administração', short: 'Admin', admin: true }
-];
+].filter(n => !(n.ac && (window.APP_MODE === 'claude' || window.APP_MODE === 'page')));   // o acompanhamento só existe com banco (Supabase) ou demonstração
 
 /* ------------------------------------------------------------------ acesso ao banco */
 function erro(msg) {
@@ -74,6 +97,7 @@ const Remote = (() => {
     listar: async () => (await dados()).orcamentos,
     responsaveis: async () => (await dados()).responsaveis,
     auditoria: async ids => (await certa(ids && ids.length ? ids : [])).auditoria,
+    acompanhamento: async () => { const d = await http('/rest/v1/rpc/consulta_acompanhamento', { p_senha: S.cs || '' }); if (d === null) throw erro('consulta_invalida: senha de consulta incorreta'); return d; },
     rpc: (nome, args) => http('/rest/v1/rpc/' + nome, args || {})
   };
 })();
@@ -131,8 +155,110 @@ const Demo = (() => {
       if (db.some(x => x.id !== o.id && (x.revisao_de_id === o.id || x.raiz_id === o.id))) throw erro('possui_revisoes: existem revisões vinculadas; arquive-as e exclua-as antes');
       log(o, 'exclusao_definitiva', p.p_por); db = db.filter(x => x !== o); return null; }
   };
+  /* ---- Acompanhamento: espelha supabase/acompanhamento.sql ---- */
+  const T5 = 'pbpe_direta pbpe_indireta pregao reajuste repactuacao', T4 = 'pbpe_direta pbpe_indireta pregao repactuacao', C3 = 'pregao repactuacao', C4 = 'pregao reajuste repactuacao';
+  const CAT = [[1, 'Estudo de Viabilidade Técnico-Econômica', 'etp', ''], [2, 'Estimativa de Custos', 'anteprojeto', ''], [3, 'Relatório Técnico de Orçamento', T5, ''],
+    [4, 'Planilha Orçamentária Resumida', T5, ''], [5, 'Planilha Orçamentária Sintética', T5, ''], [6, 'Planilha Orçamentária Analítica', T5, ''],
+    [7, 'Memória de Cálculo da Mobilização e Desmobilização', T4, C3], [8, 'Memória de Cálculo da Administração Local', T4, C3], [9, 'Detalhamento de Orçamento do Canteiro de Obras', T4, C3],
+    [10, 'Cálculo da Aquisição de Insumos (Cotação)', T5, C4], [11, 'Tabela de Composição do BDI', T4, C3], [12, 'Tabela de Encargos Sociais', T4, C3],
+    [13, 'Curva ABC de Insumos', T5, C4], [14, 'Curva ABC de Serviços', T5, C4], [15, 'Tabela de Parâmetros de Equipamentos', T4, C3], [16, 'Tabela de Equipamentos Consolidada', T4, C3],
+    [17, 'Tabela de Mão de Obra COMARA sem encargos', 'pbpe_direta', ''], [18, 'Tabela de Mão de Obra COMARA com encargos', 'pbpe_direta', ''], [19, 'Tabela de Equivalência de Mão de Obra', 'pbpe_direta', ''],
+    [20, 'Caderno de Critérios de Medição', 'pbpe_direta pbpe_indireta', ''], [21, 'ART/RRT', 'etp anteprojeto pbpe_direta pbpe_indireta', '']];
+  let dem = [], movs = [], pec = [], feri = [], mqd = [];
+  const fer = () => new Set(feri.map(f => f.data));
+  const mv = (d, acao, de, para, por, motivo, em) => movs.push({ id: movs.length + 1, demanda_id: d.id, acao, de: de || null, para: para || null, por, motivo: (motivo || '').trim() || null, em: em || new Date().toISOString() });
+  const ro = (n, m) => (n || '').trim() ? rv(n, m) : null;
+  const gd = id => { const d = dem.find(x => x.id === id && !x.arquivada_em); if (!d) throw erro('nao_encontrado: demanda não encontrada'); return d; };
+  const nv = s => (s || '').trim() || null;
+  const mkPecas = d => { if (pec.some(p => p.demanda_id === d.id)) return; CAT.filter(c => c[2].split(' ').includes(d.produto)).forEach(c => pec.push({ id: uid(), demanda_id: d.id, ordem: c[0], nome: c[1], condicional: c[3].split(' ').includes(d.produto), status: 'pendente', conferido_por: null, conferido_em: null })); };
+  const rc = d => { const l = mqd.filter(q => q.demanda_id === d.id), pend = l.filter(q => !q.recebido_em);
+    d.prazo_mq = l.length ? l.map(q => q.prazo).sort().pop() : null; d.mq_recebido_em = l.length && !pend.length ? l.map(q => q.recebido_em).sort().pop() : null;
+    d.prazo_orcamento = l.length && d.dias_elaboracao ? somaDU(l.map(q => q.recebido_em || q.prazo).sort().pop(), d.dias_elaboracao + 10, fer()) : null; };
+  const nd = (o, por, dias) => { const ts = new Date(Date.now() - dias * 864e5).toISOString(); const mq0 = o.mq || []; o = Object.assign({}, o); delete o.mq; const d = Object.assign({ id: uid(), escopo: '', origem: 'Interna', demandante: '', prioridade: 'a definir', produto: null, nivel: null, fim: null, execucao: null, tipo_objeto: null, regime: null, autor: null, supervisor: null,
+    condicionantes: null, prazo_mq: null, prazo_orcamento: null, mq_recebido_em: null, dias_elaboracao: null, etapa: 'demanda', etapa_elab: null, etapa_prazo: null, etapa_desde: ts, orcamento_id: null, atualizacao_de: null, criado_em: ts, criado_por: por, atualizado_em: null, arquivada_em: null, arquivada_motivo: null }, o);
+    dem.push(d); mq0.forEach(m => mqd.push({ id: uid(), demanda_id: d.id, disciplina: m[0], prazo: m[1], recebido_em: m[2] || null, criado_em: ts })); rc(d); mv(d, 'cadastro', null, 'demanda', por, null, ts); return d; };
+  const H = hoje();
+  nd({ escopo: 'Recuperação do pavimento do pátio de manobras', origem: 'Externa', demandante: 'Seção de Infraestrutura — Base Aérea', dias_elaboracao: 8, mq: [['Pavimentação', addD(H, 5)], ['Drenagem', addD(H, 8)]] }, 'Ana Ribeiro', 1);
+  nd({ escopo: 'Reforma da cobertura do hangar 2', demandante: 'Divisão de Manutenção', prioridade: 'Média', produto: 'pbpe_direta', nivel: 'Projeto Básico', fim: 'Projeto para licitação', execucao: 'Direta', tipo_objeto: OBJETOS[0], regime: REGIMES[0], etapa: 'definicao', dias_elaboracao: 6, mq: [['Estrutura', addD(H, -1)], ['Cobertura', addD(H, 4)]] }, 'Bruno Teixeira', 4);
+  nd({ escopo: 'Terminal de passageiros — climatização', origem: 'Externa', demandante: 'Administração do Aeródromo', prioridade: 'Alta', produto: 'pbpe_indireta', nivel: 'Projeto Básico', fim: 'Projeto para licitação', execucao: 'Indireta', tipo_objeto: OBJETOS[0], regime: REGIMES[1],
+    autor: 'Carla Mendes', supervisor: 'Diego Farias', etapa: 'elaboracao', etapa_elab: '2.5.5', dias_elaboracao: 10, mq: [['Arquitetura', addD(H, -8), addD(H, -9)], ['Climatização', addD(H, -8), addD(H, -8)]], condicionantes: 'Considerar interferência com a operação do terminal durante a obra.' }, 'Ana Ribeiro', 12);
+  const dRev = nd({ escopo: 'Drenagem superficial da pista de táxi', demandante: 'Seção de Engenharia', prioridade: 'Alta', produto: 'pbpe_indireta', nivel: 'Projeto Básico', fim: 'Projeto para licitação', execucao: 'Indireta', tipo_objeto: OBJETOS[0], regime: REGIMES[0],
+    autor: 'Bruno Teixeira', supervisor: 'Eva Lima', etapa: 'revisao', dias_elaboracao: 5, mq: [['Drenagem', addD(H, -18), addD(H, -20)]], etapa_prazo: addD(H, 3) }, 'Bruno Teixeira', 25);
+  mkPecas(dRev); pec.filter(p => p.demanda_id === dRev.id).slice(0, 7).forEach(p => { p.status = 'conferida'; p.conferido_por = 'Eva Lima'; p.conferido_em = new Date().toISOString(); });
+  nd({ escopo: 'Estudo de viabilidade — nova subestação', origem: 'Externa', demandante: 'Comando da Unidade', prioridade: 'Baixa', produto: 'etp', nivel: 'Estudo Técnico Preliminar', fim: 'Análise de viabilidade', execucao: 'Indireta', tipo_objeto: OBJETOS[0],
+    autor: 'Diego Farias', supervisor: 'Ana Ribeiro', etapa: 'aprovacao', dias_elaboracao: 12, mq: [['Elétrica', addD(H, -28), addD(H, -30)]] }, 'Diego Farias', 35);
+  nd({ escopo: 'Reforma da Escola Municipal Santa Luzia', demandante: 'Prefeitura', prioridade: 'Média', produto: 'pbpe_direta', nivel: 'Projeto Básico', fim: 'Projeto para licitação', execucao: 'Direta', tipo_objeto: OBJETOS[0], regime: REGIMES[0],
+    autor: 'Ana Ribeiro', supervisor: 'Bruno Teixeira', etapa: 'disponibilizada', orcamento_id: a, dias_elaboracao: 5, mq: [['Arquitetura', addD(H, -48), addD(H, -50)]] }, 'Ana Ribeiro', 60);
+  Object.assign(fns, {
+    admin_criar_demanda: p => { need(p.p_token); const por = rv(p.p_por); const au = ro(p.p_autor), su = ro(p.p_supervisor);
+      const ms = p.p_mqs || []; if (ms.some(m => (m.disciplina || '').trim().length < 2 || !m.prazo)) throw erro('mq_invalido: informe a disciplina e o prazo de cada MQ');
+      if (new Set(ms.map(m => m.disciplina.trim().toLowerCase())).size < ms.length) throw erro('mq_duplicado: há disciplinas repetidas');
+      if (p.p_atualizacao_de && !db.some(x => x.id === p.p_atualizacao_de)) throw erro('nao_encontrado: orçamento de origem não encontrado');
+      if ((p.p_escopo || '').trim().length < 3) throw erro('dados_invalidos: descreva o escopo da demanda');
+      if ((p.p_demandante || '').trim().length < 2) throw erro('dados_invalidos: informe o demandante');
+      const d = nd({ escopo: p.p_escopo.trim(), origem: p.p_origem, demandante: p.p_demandante.trim(), prioridade: nv(p.p_prioridade) || 'a definir', produto: nv(p.p_produto), nivel: nv(p.p_nivel), fim: nv(p.p_fim), execucao: nv(p.p_execucao),
+        tipo_objeto: nv(p.p_tipo_objeto), regime: nv(p.p_regime), autor: au, supervisor: su, condicionantes: nv(p.p_condicionantes), dias_elaboracao: p.p_dias_elaboracao || null, atualizacao_de: p.p_atualizacao_de || null, mq: ms.map(m => [m.disciplina.trim(), m.prazo]) }, por, 0);
+      return d; },
+    admin_editar_demanda: p => { need(p.p_token); const por = rv(p.p_por); const d = gd(p.p_id);
+      if (d.etapa === 'disponibilizada') throw erro('ja_disponibilizada: demanda concluída; uma atualização deve ser registrada como nova demanda');
+      const au = ro(p.p_autor, d.autor), su = ro(p.p_supervisor, d.supervisor);
+      if (['revisao', 'conferencia', 'aprovacao'].includes(d.etapa) && nv(p.p_produto) !== d.produto) throw erro('produto_travado: o produto não pode mudar depois de iniciada a revisão (as peças já foram definidas)');
+      Object.assign(d, { escopo: p.p_escopo.trim(), origem: p.p_origem, demandante: p.p_demandante.trim(), prioridade: nv(p.p_prioridade) || 'a definir', produto: nv(p.p_produto), nivel: nv(p.p_nivel), fim: nv(p.p_fim), execucao: nv(p.p_execucao), tipo_objeto: nv(p.p_tipo_objeto),
+        regime: nv(p.p_regime), autor: au, supervisor: su, condicionantes: nv(p.p_condicionantes), dias_elaboracao: p.p_dias_elaboracao || null, atualizado_em: new Date().toISOString() }); rc(d);
+      mv(d, 'edicao', null, null, por, p.p_motivo); return d; },
+    admin_mover_demanda: p => { need(p.p_token); const por = rv(p.p_por); const d = gd(p.p_id); const E = ETAPAS.map(e => e[0]);
+      const ia = E.indexOf(d.etapa), inv = E.indexOf(p.p_para);
+      if (inv < 0) throw erro('etapa_invalida: etapa desconhecida');
+      if (d.etapa === 'disponibilizada') throw erro('ja_disponibilizada: demanda concluída; uma atualização deve ser registrada como nova demanda');
+      if (inv === ia) throw erro('mesma_etapa: a demanda já está nesta etapa');
+      if (inv < ia && (p.p_motivo || '').trim().length < 3) throw erro('motivo_obrigatorio: informe o motivo para devolver a demanda a uma etapa anterior');
+      if (inv > ia + 1) throw erro('etapa_pulada: avance uma etapa de cada vez');
+      let prazo = null;
+      if (inv > ia) {
+        if (p.p_para === 'definicao' && d.prioridade === 'a definir') throw erro('prioridade_pendente: classifique a prioridade antes de autorizar a demanda');
+        if (p.p_para === 'elaboracao' && !(d.autor && d.supervisor && d.prazo_mq && d.prazo_orcamento && d.produto)) throw erro('dados_incompletos: informe o produto, o Autor, o Supervisor, os dias de elaboração e ao menos um MQ com prazo');
+        if (p.p_para === 'conferencia') { const n = pec.filter(x => x.demanda_id === d.id && x.status === 'pendente').length; if (n) throw erro(`pecas_pendentes: ainda há ${n} peça(s) pendente(s) na revisão`); }
+        if (p.p_para === 'disponibilizada' && !db.some(x => x.id === p.p_orcamento_id && !x.arquivado_em)) throw erro('orcamento_obrigatorio: informe o orçamento registrado no controle de versões');
+      }
+      const ja = e => movs.some(m => m.demanda_id === d.id && m.acao === 'mover' && m.para === e);
+      if (p.p_para === 'revisao') { mkPecas(d); prazo = somaDU(H2(), ja('revisao') ? 3 : 5, fer()); }
+      else if (p.p_para === 'conferencia') prazo = somaDU(H2(), ja('conferencia') ? 3 : 5, fer());
+      const de = d.etapa;
+      Object.assign(d, { etapa: p.p_para, etapa_desde: new Date().toISOString(), etapa_prazo: prazo, atualizado_em: new Date().toISOString() });
+      if (p.p_para === 'elaboracao') d.etapa_elab = d.etapa_elab || '2.5.1';
+      if (p.p_para === 'disponibilizada') d.orcamento_id = p.p_orcamento_id;
+      mv(d, 'mover', de, p.p_para, por, p.p_motivo); return d; },
+    admin_demanda_etapa_elab: p => { need(p.p_token); const por = rv(p.p_por); const d = gd(p.p_id);
+      if (d.etapa !== 'elaboracao') throw erro('fora_da_elaboracao: a etapa de elaboração só pode ser marcada durante a Elaboração');
+      if (!ELAB[p.p_etapa]) throw erro('etapa_invalida: etapa desconhecida'); const antes = d.etapa_elab; d.etapa_elab = p.p_etapa; d.atualizado_em = new Date().toISOString(); mv(d, 'etapa_elab', antes, p.p_etapa, por); return d; },
+    admin_mq_salvar: p => { need(p.p_token); const por = rv(p.p_por); const d = gd(p.p_demanda_id);
+      if (d.etapa === 'disponibilizada') throw erro('ja_disponibilizada: demanda concluída');
+      const disc = (p.p_disciplina || '').trim(); if (disc.length < 2) throw erro('mq_invalido: informe a disciplina'); if (!p.p_prazo) throw erro('mq_invalido: informe o prazo do MQ');
+      if (p.p_recebido_em && p.p_recebido_em > hoje()) throw erro('data_futura: a data de recebimento não pode ser futura');
+      if (mqd.some(q => q.demanda_id === d.id && q.id !== p.p_mq_id && q.disciplina.toLowerCase() === disc.toLowerCase())) throw erro('mq_duplicado: já existe um MQ da disciplina ' + disc);
+      let q = p.p_mq_id && mqd.find(x => x.id === p.p_mq_id && x.demanda_id === d.id);
+      if (p.p_mq_id && !q) throw erro('nao_encontrado: MQ não encontrado');
+      if (!q) { q = { id: uid(), demanda_id: d.id, disciplina: disc, prazo: p.p_prazo, recebido_em: p.p_recebido_em || null, criado_em: new Date().toISOString() }; mqd.push(q); mv(d, 'mq_prazo', disc, p.p_prazo, por); if (q.recebido_em) mv(d, 'mq', disc, q.recebido_em, por); }
+      else { if (q.prazo !== p.p_prazo || q.disciplina !== disc) mv(d, 'mq_prazo', disc, p.p_prazo, por); if ((q.recebido_em || null) !== (p.p_recebido_em || null)) mv(d, 'mq', disc, p.p_recebido_em || 'removido', por); Object.assign(q, { disciplina: disc, prazo: p.p_prazo, recebido_em: p.p_recebido_em || null }); }
+      rc(d); d.atualizado_em = new Date().toISOString(); return d; },
+    admin_mq_remover: p => { need(p.p_token); const por = rv(p.p_por); const q = mqd.find(x => x.id === p.p_mq_id); if (!q) throw erro('nao_encontrado: MQ não encontrado'); const d = gd(q.demanda_id);
+      if (d.etapa === 'disponibilizada') throw erro('ja_disponibilizada: demanda concluída'); mqd = mqd.filter(x => x.id !== q.id); mv(d, 'mq_prazo', q.disciplina, 'removido', por); rc(d); return d; },
+    admin_peca_status: p => { need(p.p_token); const por = rv(p.p_por); const x = pec.find(q => q.id === p.p_peca_id); if (!x) throw erro('nao_encontrado: peça não encontrada');
+      if (!PECA_ST[p.p_status]) throw erro('status_invalido: status desconhecido'); const d = dem.find(q => q.id === x.demanda_id);
+      if (d.etapa !== 'revisao') throw erro('fora_da_revisao: as peças são conferidas na etapa de Revisão');
+      if (p.p_status === 'nao_se_aplica' && !x.condicional) throw erro('peca_obrigatoria: esta peça é obrigatória para o produto e não pode ser marcada como não se aplica');
+      x.status = p.p_status; x.conferido_por = p.p_status === 'pendente' ? null : por; x.conferido_em = p.p_status === 'pendente' ? null : new Date().toISOString(); mv(d, 'peca', x.nome, p.p_status, por); return x; },
+    admin_arquivar_demanda: p => { need(p.p_token); const por = rv(p.p_por); if ((p.p_motivo || '').trim().length < 3) throw erro('motivo_obrigatorio: informe o motivo'); const d = gd(p.p_id);
+      d.arquivada_em = new Date().toISOString(); d.arquivada_motivo = p.p_motivo.trim(); mv(d, 'arquivamento', d.etapa, null, por, p.p_motivo); return null; },
+    admin_feriado_salvar: p => { need(p.p_token); if (!p.p_data) throw erro('data_invalida: informe a data'); if ((p.p_nome || '').trim().length < 2) throw erro('nome_invalido: informe o nome do feriado');
+      feri = feri.filter(f => f.data !== p.p_data); feri.push({ data: p.p_data, nome: p.p_nome.trim() }); dem.filter(x => x.etapa !== 'disponibilizada').forEach(rc); return null; },
+    admin_feriado_remover: p => { need(p.p_token); feri = feri.filter(f => f.data !== p.p_data); dem.filter(x => x.etapa !== 'disponibilizada').forEach(rc); return null; }
+  });
+  const H2 = () => hoje();
   const clone = x => JSON.parse(JSON.stringify(x));
   return {
+    acompanhamento: async () => { const ativas = dem.filter(x => !x.arquivada_em), ids = new Set(ativas.map(x => x.id));
+      return clone({ demandas: [...ativas].sort((x, y) => y.criado_em.localeCompare(x.criado_em)), movimentos: [...movs].sort((x, y) => y.em.localeCompare(x.em)).slice(0, 300), pecas: pec.filter(p => ids.has(p.demanda_id)).sort((x, y) => x.ordem - y.ordem), mqs: mqd.filter(q => ids.has(q.demanda_id)).sort((x, y) => x.prazo.localeCompare(y.prazo)), feriados: [...feri].sort((x, y) => x.data.localeCompare(y.data)) }); },
     listar: async () => clone(db.filter(x => !x.arquivado_em)).sort((x, y) => y.criado_em.localeCompare(x.criado_em)),
     responsaveis: async () => clone(resp).sort((x, y) => x.nome.localeCompare(y.nome)),
     auditoria: async ids => clone(aud).filter(x => !ids || ids.includes(x.orcamento_id)).sort((x, y) => y.em.localeCompare(x.em)).slice(0, 200),
@@ -313,7 +439,8 @@ const S = {
   items: [], resp: [], maxRev: new Map(), loaded: false, loadError: '',
   token: ses.get('token'), cs: ses.get('cs'), gateMsg: '', view: 'painel',
   f: { q: '', de: '', ate: '', exec: '', reg: '', versao: '' },
-  h: { q: '', soRev: true }, open: new Set(), sig: ''
+  h: { q: '', soRev: true }, open: new Set(), sig: '',
+  ac: { d: [], m: [], p: [], q: [], f: [], sig: '', ok: false, erro: '' }, acv: 'quadro', acf: { autor: '', nivel: '', prio: '', prazo: '' }
 };
 const vigente = o => o.num_revisao === S.maxRev.get(o.raiz_id);
 const raizDe = o => S.items.find(x => x.id === o.raiz_id);
@@ -327,7 +454,7 @@ function aplicar(items) {
 async function carregar(silencioso) {
   if (GATE && !S.cs) return;     // sem senha de consulta não se consulta o banco (evita contar tentativas erradas)
   try {
-    const [items, resp] = await Promise.all([api.listar(), api.responsaveis()]);
+    const [items, resp] = await Promise.all([api.listar(), api.responsaveis(), carregarAc()]);
     const sig = JSON.stringify([items, resp]);
     S.loadError = '';
     if (sig !== S.sig || !S.loaded) { S.sig = sig; S.resp = resp; aplicar(items); S.loaded = true; renderDados(); }
@@ -360,12 +487,12 @@ function setToken(t) {
 const rpc = (n, a) => api.rpc(n, a);
 const ativos = () => S.resp.filter(r => r.ativo);
 const porPadrao = () => { const n = norm(loc.get('nomeAdmin') || ''); const r = ativos().find(x => norm(x.nome) === n); return r ? r.nome : ''; };
-function respSelect(id, atual, legado) {
+function respSelect(id, atual, legado, opc) {
   const nomes = ativos().map(r => r.nome);
   const fora = legado && atual && !nomes.some(n => norm(n) === norm(atual));
   const lista = fora ? [atual, ...nomes] : nomes;
   const sel = atual ? lista.find(n => norm(n) === norm(atual)) : '';
-  return `<select id="${id}" required><option value="">Selecione…</option>${lista.map(n => `<option ${n === sel ? 'selected' : ''}>${esc(n)}${fora && n === atual ? ' (fora da lista)' : ''}</option>`).join('')}</select>`;
+  return `<select id="${id}" ${opc ? '' : 'required'}><option value="">${opc ? '—' : 'Selecione…'}</option>${lista.map(n => `<option ${n === sel ? 'selected' : ''}>${esc(n)}${fora && n === atual ? ' (fora da lista)' : ''}</option>`).join('')}</select>`;
 }
 
 /* ------------------------------------------------------------------ navegação */
@@ -396,7 +523,7 @@ function render() {
   document.title = `${nav.label} · Controle de Orçamentos`;
   const v = $('#view');
   if (nav.admin && !S.token) { v.innerHTML = CLOUD ? semAcessoHTML(nav) : loginHTML(nav); return; }
-  ({ painel: viewPainel, consultar: viewConsultar, cadastrar: viewCadastrar, historico: viewHistorico, administracao: viewAdmin })[S.view](v);
+  ({ painel: viewPainel, consultar: viewConsultar, cadastrar: viewCadastrar, historico: viewHistorico, administracao: viewAdmin, acompanhamento: viewAcompanhamento })[S.view](v);
 }
 function renderDados() {           // chamado quando a lista muda no banco
   if (GATE && !S.cs) return;
@@ -422,6 +549,26 @@ function rowHTML(o) {
     <span class="val">${fmtV(o.valor)}</span>
     <span class="st">${verPill(o)}</span></button>`;
 }
+function alertasAc() {
+  const H = hoje(), out = [];
+  for (const d of S.ac.d) {
+    if (d.etapa === 'disponibilizada') continue;
+    const p = [], add = (rot, prazo) => { const n = difD(H, prazo); if (n > 3) return; p.push({ n, cls: n < 0 ? 'late' : 'warn', txt: n < 0 ? `${rot} atrasado ${-n} dia${-n > 1 ? 's' : ''}` : n === 0 ? `${rot} vence hoje` : `${rot} vence em ${n} dia${n > 1 ? 's' : ''}` }); };
+    const mr = mqRes(d); if (mr.prox) add('MQ ' + mr.prox.disciplina, mr.prox.prazo);
+    if (d.prazo_orcamento) add('Orçamento', d.prazo_orcamento);
+    if ((d.etapa === 'revisao' || d.etapa === 'conferencia') && d.etapa_prazo) add(ETN[d.etapa], d.etapa_prazo);
+    if (d.etapa === 'demanda' && d.prioridade === 'a definir') p.push({ n: 0, cls: 'ant', txt: 'Prioridade a definir' });
+    if (p.length) out.push({ d, p, n: Math.min(...p.map(x => x.n)) });
+  }
+  return out.sort((a, b) => a.n - b.n);
+}
+function atencaoHTML() {
+  if (CLOUD || !S.ac.ok || S.ac.erro || !S.ac.d.length) return '';
+  const l = alertasAc();
+  return `<section class="card" aria-label="Atenção hoje"><div class="page-head"><h2>Atenção hoje</h2><a class="btn" href="#acompanhamento">Abrir acompanhamento</a></div>
+    ${l.length ? `<div class="list" style="margin-top:12px">${l.slice(0, 8).map(x => `<button class="row alerta" data-act="demanda" data-id="${x.d.id}"><span class="main"><b>${esc(x.d.escopo)}</b><small>${ETN[x.d.etapa]}${x.d.autor ? ' · Autor ' + esc(x.d.autor) : ''}</small></span><span class="tags">${x.p.map(q => `<span class="pill ${q.cls}">${esc(q.txt)}</span>`).join('')}</span></button>`).join('')}</div>${l.length > 8 ? `<p class="muted" style="margin-top:8px;font-size:.84rem">E mais ${l.length - 8} no acompanhamento.</p>` : ''}`
+      : '<p class="muted" style="margin-top:8px">Nenhum prazo vencido ou vencendo nos próximos 3 dias.</p>'}</section>`;
+}
 function viewPainel(v) {
   const it = S.items;
   const revs = it.filter(o => o.num_revisao > 0).length;
@@ -430,6 +577,7 @@ function viewPainel(v) {
     <section class="kpis" aria-label="Indicadores">
       ${k('Orçamentos cadastrados', it.length, 'originais e revisões')}${k('Orçamentos originais', it.length - revs)}${k('Revisões', revs, 'contam como orçamento')}${k('Versões vigentes', S.maxRev.size, 'a mais recente de cada série')}
     </section>
+    ${atencaoHTML()}
     <section><div class="page-head"><h2>Últimos registros</h2><a class="btn" href="#consultar">Ver todos</a></div>
       <div class="list" style="margin-top:10px">${it.length ? it.slice(0, 8).map(rowHTML).join('') : emptyHTML()}</div></section>` : '');
 }
@@ -651,12 +799,13 @@ async function viewAdmin(v) {
     <p class="muted" style="font-size:.88rem;margin-top:6px">Quem tiver esta senha consegue consultar os orçamentos. Ao trocar, avise o grupo.</p>
     <form id="trocaconsulta" class="actions" novalidate style="margin-top:12px"><label class="sr" for="c-nova">Nova senha de consulta</label><input id="c-nova" type="password" autocomplete="new-password" minlength="6" placeholder="Nova senha (mínimo 6 caracteres)" style="flex:1;min-width:220px;width:auto"><button class="btn primary" type="submit">Definir senha de consulta</button></form>
     <div id="c-msg" style="margin-top:10px"></div></section>
+  ${CLOUD ? '' : '<section class="card" id="fer-card"></section>'}
   <section class="card"><h2>Backup</h2>
     <p class="muted" style="font-size:.88rem;margin-top:6px">Baixe uma cópia dos dados em CSV (abre no Excel). Faça isso de tempos em tempos, principalmente no plano gratuito do Supabase, que não tem backup automático.</p>
     <div class="actions" style="margin-top:12px"><button class="btn" data-act="exp-orc">Exportar orçamentos (CSV)</button><button class="btn" data-act="exp-aud">Exportar registro de alterações (CSV)</button></div></section>
   <section class="card"><h2>Registros arquivados</h2><div id="arquivados" class="muted">Carregando…</div></section>
   <section class="card"><h2>Registro geral de alterações</h2><div id="auditoria" class="muted">Carregando…</div></section>`;
-  renderResp();
+  renderResp(); renderFeriados();
   if (CLOUD) { const t = $('#trocasenha'); if (t) t.closest('section').remove(); const c = $('#consulta-card'); if (c) c.remove(); }
   guard(async () => {
     const arq = await rpc('admin_listar_arquivados', { p_token: S.token });
@@ -676,6 +825,260 @@ async function viewAdmin(v) {
     const box = $('#auditoria'); if (!box) return; box.className = '';
     box.innerHTML = a.length ? `<ul class="logs">${a.slice(0, 40).map(l => `<li><span><b>${esc(({ cadastro: 'cadastro', revisao: 'revisão', edicao: 'correção', arquivamento: 'arquivamento', restauracao: 'restauração', exclusao_definitiva: 'exclusão definitiva', troca_senha: 'troca de senha', troca_senha_consulta: 'troca da senha de consulta' })[l.acao] || l.acao)}</b> · orçamento ${esc(l.numero)} · ${esc(l.por || '—')}</span><time>${fmtDT(l.em)}</time>${l.motivo ? `<span>${esc(l.motivo)}</span>` : ''}</li>`).join('')}</ul>` : 'Sem registros.';
   }).catch(() => {});
+}
+
+
+/* ------------------------------------------------------------------ acompanhamento (elaboração, NPA 2/DE-SDPO/2023) */
+const ferSet = () => new Set(S.ac.f.map(x => x.data));
+const autoresAc = () => [...new Set([...S.ac.d.map(d => d.autor), ...S.ac.d.map(d => d.supervisor)].filter(Boolean))].sort((a, b) => a.localeCompare(b));
+function sit(prazo, ok) {
+  const dif = difD(hoje(), prazo);
+  if (dif < 0) return { txt: `Atrasado ${-dif} dia${-dif > 1 ? 's' : ''}`, cls: 'late' };
+  if (dif === 0) return { txt: 'Vence hoje', cls: 'warn' };
+  if (dif <= 3) return { txt: `Vence em ${dif} dia${dif > 1 ? 's' : ''}`, cls: 'warn' };
+  return { txt: ok, cls: 'ant' };
+}
+const mqsDe = id => S.ac.q.filter(q => q.demanda_id === id);
+function mqRes(d) { const l = mqsDe(d.id), pend = l.filter(q => !q.recebido_em).sort((a, b) => a.prazo.localeCompare(b.prazo)); return { l, n: l.length, rec: l.length - pend.length, pend, prox: pend[0] }; }
+function sitMQ(d) {
+  const r = mqRes(d);
+  if (!r.n) return { txt: 'Sem MQ cadastrado', cls: 'ant', r };
+  if (!r.pend.length) return { txt: 'Todos recebidos', cls: 'ok', r };
+  return { ...sit(r.prox.prazo, 'Próximo ' + fmtD(r.prox.prazo)), r };
+}
+function sitOrc(d) {
+  if (d.etapa === 'disponibilizada') return { txt: 'Entregue', cls: 'ok' };
+  if (!d.prazo_orcamento) return { txt: 'Informe MQs e dias', cls: 'ant' };
+  return sit(d.prazo_orcamento, 'No prazo');
+}
+const pecasDe = id => S.ac.p.filter(p => p.demanda_id === id);
+function etapaInfo(d) {
+  if (d.etapa === 'elaboracao') return { txt: `${d.etapa_elab || '2.5.1'} ${ELAB[d.etapa_elab || '2.5.1']}`, cls: '' };
+  if (d.etapa === 'revisao' || d.etapa === 'conferencia') {
+    const ps = pecasDe(d.id), ok = ps.filter(p => p.status !== 'pendente').length;
+    const atraso = d.etapa_prazo && d.etapa_prazo < hoje();
+    return { txt: `${ETN[d.etapa]}: prazo ${fmtD(d.etapa_prazo)}${atraso ? ' (vencido)' : ''}${d.etapa === 'revisao' && ps.length ? ` · peças ${ok}/${ps.length}` : ''}`, cls: atraso ? 'late' : '' };
+  }
+  if (d.etapa === 'aprovacao') return { txt: 'Aguardando aprovação', cls: '' };
+  return null;
+}
+const prioChip = d => `<span class="chip prio-${d.prioridade === 'a definir' ? 'nd' : norm(d.prioridade)}">${d.prioridade === 'a definir' ? 'Prioridade a definir' : 'Prioridade ' + esc(d.prioridade)}</span>`;
+function filtraAc() {
+  const f = S.acf;
+  return S.ac.d.filter(d => (!f.autor || d.autor === f.autor || d.supervisor === f.autor) && (!f.nivel || d.nivel === f.nivel) && (!f.prio || d.prioridade === f.prio)
+    && (!f.prazo || (d.etapa !== 'disponibilizada' && ((d.prazo_orcamento && d.prazo_orcamento < hoje()) || mqRes(d).pend.some(q => q.prazo < hoje())))));
+}
+function cardAc(d, mostraEtapa) {
+  const mq = sitMQ(d), oc = sitOrc(d), ei = etapaInfo(d);
+  return `<button class="ac-card" data-act="demanda" data-id="${d.id}">
+    <b>${esc(d.escopo)}</b>
+    <span class="ac-tags">${mostraEtapa ? `<span class="chip vig">${ETN[d.etapa]}</span>` : ''}${d.nivel ? `<span class="chip">${esc(d.nivel)}</span>` : ''}${d.execucao ? `<span class="chip">${esc(d.execucao)}</span>` : ''}${prioChip(d)}</span>
+    <small>${d.autor ? 'Autor ' + esc(d.autor) : 'Autor a definir'}${d.supervisor ? ' · Sup. ' + esc(d.supervisor) : ''}</small>
+    ${ei ? `<small class="ac-et ${ei.cls}">${esc(ei.txt)}</small>` : ''}
+    <span class="ac-dates"><span>MQs <b class="mono">${mq.r.rec}/${mq.r.n}</b> <i class="pill ${mq.cls}">${esc(mq.txt)}</i></span><span>Orçamento${mq.r.pend.length && d.etapa !== 'disponibilizada' ? ' (previsto)' : ''} <b class="mono">${fmtD(d.prazo_orcamento)}</b> <i class="pill ${oc.cls}">${esc(oc.txt)}</i></span></span>
+  </button>`;
+}
+function viewAcompanhamento(v) {
+  const f = S.acf, opt = (arr, cur) => '<option value="">Todos</option>' + arr.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join('');
+  v.innerHTML = head('Acompanhamento', 'Demandas em elaboração, prazos de MQ e de entrega e checklist de peças (NPA 2/DE-SDPO/2023).', S.token ? '<button class="btn primary" data-act="nova-dem">Nova demanda</button>' : '') + `
+  <form class="card filters ac-filters" onsubmit="return false">
+    <div class="field"><span>Visualização</span><div class="seg"><label><input type="radio" name="acv" value="quadro" data-act="ac-view" ${S.acv === 'quadro' ? 'checked' : ''}><span>Quadro</span></label><label><input type="radio" name="acv" value="lista" data-act="ac-view" ${S.acv === 'lista' ? 'checked' : ''}><span>Lista</span></label></div></div>
+    <label class="field"><span>Autor ou supervisor</span><select id="acf-autor">${opt(autoresAc(), f.autor)}</select></label>
+    <label class="field"><span>Nível</span><select id="acf-nivel">${opt(NIVEIS, f.nivel)}</select></label>
+    <label class="field"><span>Prioridade</span><select id="acf-prio">${opt(PRIOS.slice(1), f.prio)}</select></label>
+    <label class="field"><span>Prazo</span><select id="acf-prazo"><option value="">Todos</option><option value="atrasado" ${f.prazo ? 'selected' : ''}>Com prazo vencido</option></select></label>
+  </form><div id="ac-res"></div>`;
+  renderAc();
+}
+function renderAc() {
+  const box = $('#ac-res'); if (!box) return;
+  if (!S.ac.ok) { box.innerHTML = '<div class="list"><div class="skeleton"></div><div class="skeleton"></div></div>'; return; }
+  if (S.ac.erro) { box.innerHTML = `<div class="msg err">${esc(S.ac.erro)}</div>`; return; }
+  const todas = S.ac.d, H = hoje(), ativas = todas.filter(d => d.etapa !== 'disponibilizada');
+  const k = (l, n, s) => `<div class="kpi"><small>${l}</small><strong>${n}</strong>${s ? `<em>${s}</em>` : ''}</div>`;
+  const atras = ativas.filter(d => d.prazo_orcamento && d.prazo_orcamento < H).length;
+  const mqEsp = ativas.filter(d => mqRes(d).pend.length).length;
+  const mes = todas.filter(d => d.etapa === 'disponibilizada' && (d.etapa_desde || '').slice(0, 7) === H.slice(0, 7)).length;
+  const lista = filtraAc();
+  let corpo;
+  if (!todas.length) corpo = `<div class="empty"><b>Nenhuma demanda cadastrada</b>${S.token ? 'Use o botão Nova demanda para registrar a primeira.' : 'Os administradores registram as demandas por aqui.'}</div>`;
+  else if (S.acv === 'lista') {
+    const ord = [...lista].sort((a, b) => (a.etapa === 'disponibilizada') - (b.etapa === 'disponibilizada') || (a.prazo_orcamento || '9').localeCompare(b.prazo_orcamento || '9'));
+    corpo = ord.length ? `<div class="ac-list">${ord.map(d => cardAc(d, true)).join('')}</div>` : '<div class="empty"><b>Nenhuma demanda com esses filtros</b></div>';
+  } else {
+    const cols = ETAPAS.slice(0, 6).map(([id, nome]) => { const l = lista.filter(d => d.etapa === id);
+      return `<section class="ac-col" aria-label="${nome}"><h3>${nome} <span class="count">${l.length}</span></h3>${l.length ? l.map(d => cardAc(d)).join('') : '<p class="muted ac-vazio">Nenhuma demanda</p>'}</section>`; }).join('');
+    const ok = lista.filter(d => d.etapa === 'disponibilizada');
+    corpo = `<div class="ac-board">${cols}</div>${ok.length ? `<section><h3 style="margin:6px 0 10px">Disponibilizadas <span class="count">${ok.length}</span></h3><div class="ac-list">${ok.map(d => cardAc(d)).join('')}</div></section>` : ''}`;
+  }
+  box.innerHTML = `<section class="kpis" aria-label="Indicadores">${k('Em andamento', ativas.length, 'demandas abertas')}${k('Orçamentos atrasados', atras, 'prazo de entrega vencido')}${k('MQ aguardando demandante', mqEsp, 'demandas com disciplina pendente')}${k('Disponibilizadas no mês', mes)}</section>${corpo}`;
+}
+async function acRefresh() { try { await carregarAc(); } catch { /* a senha de consulta é tratada em carregar() */ } if (S.view === 'acompanhamento') renderAc(); if (S.view === 'administracao') renderFeriados(); }
+async function carregarAc() {
+  if (CLOUD) return;
+  try {
+    const r = await api.acompanhamento(), sig = JSON.stringify(r);
+    if (sig !== S.ac.sig || !S.ac.ok || S.ac.erro) { S.ac = { d: r.demandas, m: r.movimentos, p: r.pecas, q: r.mqs || [], f: r.feriados, sig, ok: true, erro: '' }; if (S.view === 'acompanhamento') renderAc(); if (S.view === 'administracao') renderFeriados(); if (S.view === 'painel' && S.loaded) viewPainel($('#view')); }
+  } catch (e) {
+    if (e.code === 'consulta_invalida') throw e;
+    S.ac.ok = true; S.ac.erro = /consulta_acompanhamento|schema cache|Could not find/i.test(e.message) ? 'O Acompanhamento ainda não foi instalado no banco. Rode o arquivo supabase/acompanhamento.sql no Supabase (veja o README).' : e.message;
+    if (S.view === 'acompanhamento') renderAc();
+  }
+}
+const movTxt = m => ({ cadastro: () => 'Demanda cadastrada', mover: () => `${ETN[m.de] || m.de} → ${ETN[m.para] || m.para}`, edicao: () => 'Dados editados',
+  etapa_elab: () => `Elaboração: ${m.para} ${ELAB[m.para] || ''}`, mq: () => m.para === 'removido' ? `MQ ${m.de}: recebimento removido` : `MQ ${m.de}: recebido em ${fmtD(m.para)}`, mq_prazo: () => m.para === 'removido' ? `MQ ${m.de}: removido` : `MQ ${m.de}: prazo ${fmtD(m.para)}`,
+  peca: () => `${m.de}: ${(PECA_ST[m.para] || m.para).toLowerCase()}`, arquivamento: () => 'Demanda arquivada' }[m.acao] || (() => m.acao))();
+function openDemanda(id) {
+  const d = S.ac.d.find(x => x.id === id); if (!d) { toast('Demanda não encontrada. Atualize a página.'); return; }
+  const dd = (t, x, full) => `<div ${full ? 'class="full"' : ''}><dt>${t}</dt><dd>${x}</dd></div>`, mq = sitMQ(d), oc = sitOrc(d), ei = etapaInfo(d);
+  const ps = pecasDe(d.id), idx = ETAPAS.findIndex(e => e[0] === d.etapa), prox = ETAPAS[idx + 1], ant = ETAPAS[idx - 1];
+  const orc = d.orcamento_id && byId(d.orcamento_id), podeMq = S.token && d.etapa !== 'disponibilizada';
+  const mqSec = `<section><h3 style="margin-bottom:6px">Memoriais de Quantidades (MQ) por disciplina · ${mq.r.rec}/${mq.r.n}</h3>
+    <p class="muted" style="font-size:.84rem;margin-bottom:10px">O prazo do orçamento conta a partir do <b>último MQ recebido</b>: ${d.dias_elaboracao || 'N'} dias úteis de elaboração + 5 de Revisão + 5 de Conferência (NPA 2/DE-SDPO/2023), sem fins de semana e feriados cadastrados.${mq.r.pend.length ? ' Enquanto faltar MQ, o prazo é uma previsão.' : ''}</p>
+    ${mq.r.n ? `<ul class="pecas">${mq.r.l.map(q => { const s2 = q.recebido_em ? { cls: 'ok', txt: 'Recebido ' + fmtD(q.recebido_em) } : sit(q.prazo, 'No prazo');
+      return `<li><span>${esc(q.disciplina)} <small class="muted">prazo ${fmtD(q.prazo)}</small></span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><span class="pill ${s2.cls}">${esc(s2.txt)}</span>${podeMq ? `${q.recebido_em ? '' : `<button class="btn" data-act="mq" data-id="${d.id}" data-mq="${q.id}" data-rec="1">Receber</button>`}<button class="btn" data-act="mq" data-id="${d.id}" data-mq="${q.id}">Editar</button>` : ''}</span></li>`; }).join('')}</ul>` : '<p class="muted">Nenhum MQ cadastrado.</p>'}
+    ${podeMq ? `<div class="actions" style="margin-top:10px"><button class="btn" data-act="mq" data-id="${d.id}">Adicionar disciplina</button></div>` : ''}</section>`;
+  const pecas = ps.length ? `<section><h3 style="margin-bottom:10px">Checklist de peças (Anexo A) · ${ps.filter(p => p.status !== 'pendente').length}/${ps.length}</h3><ul class="pecas">${ps.map(p => `<li class="${p.status}"><span>${esc(p.nome)}${p.condicional ? ' <small class="muted">(no que couber)</small>' : ''}</span>
+      ${S.token && d.etapa === 'revisao' ? `<select class="pc-sel" data-id="${p.id}" aria-label="Situação da peça ${esc(p.nome)}">${Object.entries(PECA_ST).map(([v, t]) => `<option value="${v}" ${v === p.status ? 'selected' : ''} ${v === 'nao_se_aplica' && !p.condicional ? 'disabled' : ''}>${t}</option>`).join('')}</select>`
+        : `<span class="pill ${p.status === 'conferida' ? 'ok' : 'ant'}">${PECA_ST[p.status]}${p.conferido_por ? ' · ' + esc(p.conferido_por) : ''}</span>`}</li>`).join('')}</ul></section>` : '';
+  const movs = S.ac.m.filter(m => m.demanda_id === d.id).filter(m => m.acao !== 'peca').slice(0, 30);
+  const acoes = S.token && d.etapa !== 'disponibilizada' ? `<section class="card" style="box-shadow:none"><h3 style="margin-bottom:10px">Ações</h3>
+      <label class="field" style="max-width:340px;margin-bottom:12px"><span>Quem está registrando</span>${respSelect('ac-por', porPadrao())}</label>
+      ${d.etapa === 'elaboracao' ? `<label class="field" style="max-width:420px;margin-bottom:12px"><span>Etapa de elaboração (item da NPA)</span><select class="el-sel" data-id="${d.id}">${Object.entries(ELAB).map(([k2, t]) => `<option value="${k2}" ${k2 === (d.etapa_elab || '2.5.1') ? 'selected' : ''}>${k2} ${t}</option>`).join('')}</select></label>` : ''}
+      <div class="actions">${prox ? `<button class="btn primary" data-act="mover" data-id="${d.id}" data-para="${prox[0]}">Avançar para ${prox[1]}</button>` : ''}${ant ? `<button class="btn" data-act="mover" data-id="${d.id}" data-para="${ant[0]}" data-volta="1">Devolver para ${ant[1]}</button>` : ''}
+      <button class="btn" data-act="editar-dem" data-id="${d.id}">Editar dados</button><button class="btn ghost-danger" data-act="arq-dem" data-id="${d.id}">Arquivar</button></div></section>` : '';
+  dlgShell(esc(d.escopo), `<div class="muted mono" style="font-size:.82rem;margin-bottom:4px">Demanda · ${esc(d.origem)}</div>`, `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="pill ${d.etapa === 'disponibilizada' ? 'ok' : 'rev'}">${ETN[d.etapa]}</span>${prioChip(d)}${ei ? `<span class="pill ${ei.cls || 'ant'}">${esc(ei.txt)}</span>` : ''}</div>
+    <dl class="dl">
+      ${dd('Demandante', esc(d.demandante))}${dd('Produto', d.produto ? esc(PRODUTOS[d.produto]) : '—')}
+      ${dd('Autor', esc(d.autor || '—'))}${dd('Supervisor técnico', esc(d.supervisor || '—'))}
+      ${dd('Dias úteis de elaboração', d.dias_elaboracao ? d.dias_elaboracao + ' (definidos pelos chefes da DE e da SDPO)' : '—')}${dd(mq.r.pend.length && d.etapa !== 'disponibilizada' ? 'Prazo do orçamento (previsto)' : 'Prazo do orçamento', `<b class="mono">${fmtD(d.prazo_orcamento)}</b> <span class="pill ${oc.cls}">${esc(oc.txt)}</span>`)}
+      ${dd('Nível', esc(d.nivel || '—'))}${dd('Fim a que se destina', esc(d.fim || '—'))}${dd('Forma de execução', esc(d.execucao || '—'))}${dd('Regime', esc(d.regime || '—'))}${dd('Objeto', esc(d.tipo_objeto || '—'))}
+      ${dd('Cadastrada em', fmtDT(d.criado_em) + ' por ' + esc(d.criado_por))}
+      ${orc ? dd('Orçamento no controle de versões', `<button class="btn" data-act="detalhe" data-id="${orc.id}">${esc(orc.numero)} · ${ord(orc.num_revisao)}</button>`, true) : ''}
+      ${d.atualizacao_de ? dd('Atualização do orçamento', byId(d.atualizacao_de) ? esc(byId(d.atualizacao_de).numero + ' · ' + byId(d.atualizacao_de).obra) : '—', true) : ''}
+      ${dd('Condicionantes e limitantes', d.condicionantes ? esc(d.condicionantes).replace(/\n/g, '<br>') : '—', true)}
+    </dl>${mqSec}${acoes}${pecas}
+    <section><h3 style="margin-bottom:10px">Movimentações</h3>${movs.length ? `<ul class="logs">${movs.map(m => `<li><span><b>${esc(movTxt(m))}</b> · ${esc(m.por)}</span><time>${fmtDT(m.em)}</time>${m.motivo ? `<span>${esc(m.motivo)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="muted">Sem movimentações.</p>'}</section>`);
+}
+const voltaDem = id => `<div><button class="btn" data-act="demanda" data-id="${id}">Voltar à demanda</button></div>`;
+function openMover(id, para, volta) {
+  const d = S.ac.d.find(x => x.id === id); if (!d) return;
+  const orcs = S.items.filter(o => vigente(o));
+  dlgShell(`${volta ? 'Devolver' : 'Avançar'} para ${ETN[para]}`, `<div class="muted" style="font-size:.82rem;margin-bottom:4px">${esc(d.escopo)}</div>`, `
+    ${para === 'disponibilizada' ? '<div class="msg info">Antes de disponibilizar, registre o orçamento no controle de versões (menu Cadastrar ou revisão) e escolha-o abaixo.</div>' : ''}
+    <form id="mover" data-id="${id}" data-para="${para}" class="form-grid" novalidate>
+      ${para === 'disponibilizada' ? `<label class="field full"><span>Orçamento registrado</span><select id="m-orc" required><option value="">Selecione…</option>${orcs.map(o => `<option value="${o.id}">${esc(o.numero)} · ${esc(o.obra)} · ${ord(o.num_revisao)}</option>`).join('')}</select></label>` : ''}
+      <label class="field full"><span>Motivo${volta ? '' : ' (opcional)'}</span><input id="m-motivo" maxlength="300" ${volta ? 'required' : ''} placeholder="${volta ? 'Ex.: correção de quantitativos apontada na revisão' : ''}"></label>
+      <label class="field"><span>Quem está registrando</span>${respSelect('m-por', porPadrao())}</label>
+      <div class="field"><span>&nbsp;</span><div class="actions"><button class="btn primary" type="submit">Confirmar</button><button class="btn" type="button" data-act="demanda" data-id="${id}">Cancelar</button></div></div><div class="full" id="m-msg"></div></form>`);
+}
+function openMqForm(id, mqId, receber) {
+  const d = S.ac.d.find(x => x.id === id); if (!d) return;
+  const q = mqId ? S.ac.q.find(x => x.id === mqId) : null;
+  dlgShell(q ? (receber ? 'Registrar recebimento do MQ' : 'Editar MQ') : 'Adicionar MQ', `<div class="muted" style="font-size:.82rem;margin-bottom:4px">${esc(d.escopo)}</div>`, `<form id="mqf" data-id="${id}" data-mq="${mqId || ''}" class="form-grid" novalidate>
+    <label class="field"><span>Disciplina</span><input id="q-disc" required maxlength="80" value="${esc(q ? q.disciplina : '')}" placeholder="Ex.: Arquitetura, Elétrica, Hidrossanitário"></label>
+    <label class="field"><span>Prazo para o demandante entregar</span><input id="q-prazo" type="date" required value="${q ? q.prazo : ''}"></label>
+    <label class="field"><span>Data em que o MQ foi recebido</span><input id="q-rec" type="date" max="${hoje()}" value="${q ? (q.recebido_em || (receber ? hoje() : '')) : ''}"><small>Deixe vazio enquanto não chegar.</small></label>
+    <label class="field"><span>Quem está registrando</span>${respSelect('q-por', porPadrao())}</label>
+    <div class="full actions"><button class="btn primary" type="submit">Salvar</button>${q ? `<button class="btn ghost-danger" type="button" data-act="mq-del" data-id="${id}" data-mq="${mqId}">Remover MQ</button>` : ''}<button class="btn" type="button" data-act="demanda" data-id="${id}">Cancelar</button></div><div class="full" id="q-msg"></div></form>`);
+}
+function openArqDem(id) {
+  const d = S.ac.d.find(x => x.id === id); if (!d) return;
+  dlgShell('Arquivar demanda', `<div class="muted" style="font-size:.82rem;margin-bottom:4px">${esc(d.escopo)}</div>`, `<div class="msg info">A demanda sai do acompanhamento, mas o histórico fica guardado no banco.</div>
+    <form id="arqd" data-id="${id}" class="form-grid" novalidate><label class="field full"><span>Motivo</span><input id="ad-motivo" required maxlength="300"></label>
+    <label class="field"><span>Quem está arquivando</span>${respSelect('ad-por', porPadrao())}</label>
+    <div class="field"><span>&nbsp;</span><div class="actions"><button class="btn danger" type="submit">Arquivar</button><button class="btn" type="button" data-act="demanda" data-id="${id}">Cancelar</button></div></div><div class="full" id="ad-msg"></div></form>`);
+}
+const opcSel = (id, arr, cur, vazio = '—') => `<select id="${id}"><option value="">${vazio}</option>${arr.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+function openDemForm(id) {
+  const d = id ? S.ac.d.find(x => x.id === id) : null; if (id && !d) return;
+  const x = d || { origem: 'Interna', prioridade: 'a definir', execucao: '' };
+  const travado = d && ['revisao', 'conferencia', 'aprovacao'].includes(d.etapa);
+  setTimeout(atualizaPrev, 0);
+  dlgShell(d ? 'Editar demanda' : 'Nova demanda', '', `${ativos().length ? '' : '<div class="msg err">Cadastre os responsáveis em Administração antes de registrar demandas.</div>'}
+    <form id="demf" data-dem="${id || ''}" class="form-grid" novalidate>
+      <fieldset class="full prazos"><legend>Prazos</legend><div class="form-grid">
+        <label class="field"><span>Dias úteis de elaboração do orçamento</span><input id="d-dias" type="number" min="1" max="365" inputmode="numeric" value="${x.dias_elaboracao || ''}" placeholder="Definido pelos chefes da DE e da SDPO"><small>A Revisão (5) e a Conferência (5) já são somadas pela NPA.</small></label>
+        <div class="field"><span>Prazo do orçamento (calculado)</span><output id="d-prev" class="prev">—</output></div>
+        ${d ? `<p class="muted full" style="font-size:.84rem">Os MQs (disciplinas, prazos e recebimentos) são gerenciados na própria demanda. ${mqsDe(d.id).length} cadastrado(s).</p>` : `<div class="full"><span class="lbl">Memoriais de Quantidades por disciplina (opcional agora; podem ser adicionados depois)</span><div id="mq-rows"></div><button type="button" class="btn" data-act="mq-row-add" style="margin-top:8px">+ Adicionar disciplina</button></div>`}</div></fieldset>
+      <label class="field full"><span>Escopo da demanda</span><input id="d-escopo" required maxlength="200" value="${esc(x.escopo || '')}" placeholder="Ex.: Reforma da cobertura do hangar 2"></label>
+      <div class="field"><span>Origem</span>${seg('origem', ['Interna', 'Externa'], x.origem)}</div>
+      <label class="field"><span>Demandante</span><input id="d-dem" required maxlength="120" value="${esc(x.demandante || '')}"></label>
+      <label class="field"><span>Prioridade</span><select id="d-prio">${PRIOS.map(p => `<option value="${p}" ${p === x.prioridade ? 'selected' : ''}>${p === 'a definir' ? 'A definir (Coordenador classifica)' : p}</option>`).join('')}</select><small>Considere urgência, importância, interferência na atividade fim ou meio, interesse externo e prazo.</small></label>
+      ${d ? '<span></span>' : `<label class="field"><span>Atualização de orçamento já entregue?</span><select id="d-atu"><option value="">Não, demanda nova</option>${S.items.filter(o => vigente(o)).map(o => `<option value="${o.id}">Sim, atualiza o orçamento ${esc(o.numero)} · ${esc(o.obra)}</option>`).join('')}</select></label>`}
+      <label class="field"><span>Nível do produto</span>${opcSel('d-nivel', NIVEIS, x.nivel)}</label>
+      <label class="field"><span>Fim a que se destina</span>${opcSel('d-fim', FINS, x.fim)}</label>
+      <div class="field"><span>Forma de execução</span>${seg('dexec', ['Direta', 'Indireta'], x.execucao || '')}</div>
+      <label class="field"><span>Objeto</span>${opcSel('d-obj', OBJETOS, x.tipo_objeto)}</label>
+      <label class="field"><span>Regime da empreitada</span>${opcSel('d-reg', REGIMES, x.regime)}</label>
+      <label class="field"><span>Produto (define as peças do checklist)</span><select id="d-prod" ${travado ? 'disabled' : ''}><option value="">A definir</option>${Object.entries(PRODUTOS).map(([k2, t]) => `<option value="${k2}" ${k2 === x.produto ? 'selected' : ''}>${t}</option>`).join('')}</select><small>${travado ? 'Travado: as peças já foram definidas na revisão.' : 'Sugerido pelos campos acima; pode ser ajustado.'}</small></label>
+      <label class="field"><span>Autor</span>${respSelect('d-autor', x.autor, true, true)}</label>
+      <label class="field"><span>Supervisor técnico</span>${respSelect('d-sup', x.supervisor, true, true)}</label>
+      <label class="field full"><span>Condicionantes e limitantes</span><textarea id="d-cond" maxlength="2000" placeholder="Premissas que impactam os parâmetros do orçamento">${esc(x.condicionantes || '')}</textarea></label>
+      ${d ? '<label class="field full"><span>Motivo da alteração</span><input id="d-motivo" maxlength="300"></label>' : ''}
+      <label class="field"><span>Quem está registrando</span>${respSelect('d-por-resp', porPadrao())}</label>
+      <div class="field"><span>&nbsp;</span><div class="actions"><button class="btn primary" type="submit">${d ? 'Salvar alterações' : 'Salvar demanda'}</button><button class="btn" type="button" data-act="${d ? 'demanda' : 'fechar'}" data-id="${id || ''}">Cancelar</button></div></div><div class="full" id="d-msg"></div>
+    </form>`);
+}
+const mqRowHTML = () => `<div class="mq-row"><input class="mq-d" maxlength="80" placeholder="Disciplina (ex.: Arquitetura)" aria-label="Disciplina"><input class="mq-p" type="date" aria-label="Prazo do MQ"><button type="button" class="btn ghost-danger" data-act="mq-row-del" aria-label="Remover disciplina">Remover</button></div>`;
+function atualizaPrev() {
+  const f = $('#demf'), o = $('#d-prev'); if (!f || !o) return;
+  const id = f.dataset.dem, dias = Number($('#d-dias').value) || 0; let datas;
+  if (id) datas = mqsDe(id).map(q => q.recebido_em || q.prazo); else datas = [...f.querySelectorAll('.mq-p')].map(i => i.value).filter(Boolean);
+  if (!dias || !datas.length) { o.textContent = datas.length ? 'Informe os dias de elaboração' : id ? 'Cadastre os MQs na demanda' : 'Informe os dias e ao menos um MQ'; return; }
+  const base = datas.sort().pop(); o.textContent = fmtD(somaDU(base, dias + 10, ferSet())) + ' (previsto)';
+}
+async function enviarDem(f) {
+  const v = i => ($('#' + i, f)?.value ?? '').trim(), id = f.dataset.dem, msg = $('#d-msg', f);
+  const err = [];
+  if (v('d-escopo').length < 3) err.push('Descreva o escopo da demanda.');
+  if (v('d-dem').length < 2) err.push('Informe o demandante.');
+  const dias = v('d-dias') ? Number(v('d-dias')) : null; if (dias !== null && (!Number.isInteger(dias) || dias < 1 || dias > 365)) err.push('Dias de elaboração: informe um número inteiro entre 1 e 365.');
+  const mqs = [...f.querySelectorAll('.mq-row')].map(r => ({ disciplina: $('.mq-d', r).value.trim(), prazo: $('.mq-p', r).value })).filter(m => m.disciplina || m.prazo);
+  if (mqs.some(m => m.disciplina.length < 2 || !m.prazo)) err.push('Cada MQ precisa de disciplina e prazo.');
+  if (new Set(mqs.map(m => m.disciplina.toLowerCase())).size < mqs.length) err.push('Há disciplinas repetidas nos MQs.');
+  if (!v('d-por-resp')) err.push('Escolha quem está registrando.');
+  if (err.length) { msg.innerHTML = `<div class="msg err">${esc(err.join(' '))}</div>`; return; }
+  msg.innerHTML = ''; const btn = $('button[type=submit]', f); btn.disabled = true; loc.set('nomeAdmin', v('d-por-resp'));
+  const base = { p_token: S.token, p_escopo: v('d-escopo'), p_origem: (f.querySelector('input[name="origem"]:checked') || {}).value, p_demandante: v('d-dem'), p_prioridade: v('d-prio'),
+    p_produto: $('#d-prod', f).disabled ? (S.ac.d.find(x => x.id === id) || {}).produto || '' : v('d-prod'), p_nivel: v('d-nivel'), p_fim: v('d-fim'), p_execucao: (f.querySelector('input[name="dexec"]:checked') || {}).value || '',
+    p_tipo_objeto: v('d-obj'), p_regime: v('d-reg'), p_autor: v('d-autor'), p_supervisor: v('d-sup'), p_condicionantes: v('d-cond'), p_dias_elaboracao: dias, p_por: v('d-por-resp') };
+  try {
+    let d;
+    if (id) d = await rpc('admin_editar_demanda', { ...base, p_id: id, p_motivo: v('d-motivo') });
+    else d = await rpc('admin_criar_demanda', { ...base, p_mqs: mqs, p_atualizacao_de: v('d-atu') || null });
+    await acRefresh(); toast(id ? 'Demanda atualizada.' : 'Demanda cadastrada.'); openDemanda(d.id);
+  } catch (e) {
+    if (e.code === 'nao_autorizado') { setToken(null); dlg().close(); render(); toast('Sessão expirada. Entre novamente com a senha.'); }
+    else msg.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+  } finally { btn.disabled = false; }
+}
+/* ação rápida dentro do detalhe (peça, etapa de elaboração, avanço) — usa o campo "Quem está registrando" */
+function acaoRapida(id, nome, args, ok) {
+  const por = ($('#ac-por') || {}).value; if (!por) { toast('Escolha, em Ações, quem está registrando.'); return false; }
+  loc.set('nomeAdmin', por);
+  guard(async () => { try { await rpc(nome, { p_token: S.token, ...args, p_por: por }); await acRefresh(); if (ok) toast(ok); } catch (e) { if (e.code === 'nao_autorizado') throw e; toast(e.message); await acRefresh(); } openDemanda(id); });
+  return true;
+}
+function diaSemana(iso) { return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][new Date(iso + 'T12:00:00Z').getUTCDay()]; }
+function renderFeriados() {
+  const box = $('#fer-card'); if (!box) return;
+  const fs = S.ac.f, ano = hoje().slice(0, 4);
+  box.innerHTML = `<h2>Feriados e pontos facultativos</h2>
+    <p class="muted" style="font-size:.88rem;margin-top:6px">Os prazos de Revisão e Conferência (5 ou 3 dias úteis) não contam sábados, domingos nem as datas abaixo.</p>
+    ${S.ac.erro ? `<div class="msg err" style="margin-top:12px">${esc(S.ac.erro)}</div>` : `
+    <form id="addfer" class="actions" novalidate style="margin-top:12px"><label class="sr" for="fer-data">Data</label><input id="fer-data" type="date" required style="width:auto"><label class="sr" for="fer-nome">Nome</label><input id="fer-nome" placeholder="Nome do feriado" maxlength="100" required style="flex:1;min-width:180px;width:auto"><button class="btn primary" type="submit">Adicionar</button></form>
+    <div class="actions" style="margin-top:10px"><button class="btn" data-act="fer-nac" data-ano="${ano}">Adicionar feriados nacionais de ${ano}</button><button class="btn" data-act="fer-nac" data-ano="${Number(ano) + 1}">Adicionar feriados nacionais de ${Number(ano) + 1}</button></div>
+    <div id="fer-msg" style="margin-top:10px"></div>
+    <div class="list" style="margin-top:12px">${fs.length ? fs.map(f => `<div class="fer-row"><span><b class="mono">${fmtD(f.data)}</b> <small class="muted">${diaSemana(f.data)}</small> · ${esc(f.nome)}</span><button class="btn ghost-danger" data-act="del-fer" data-id="${f.data}">Remover</button></div>`).join('') : '<div class="empty"><b>Nenhum feriado cadastrado</b>Sem eles, só sábados e domingos ficam de fora da contagem.</div>'}</div>`}`;
+}
+function feriadosNacionais(ano) {
+  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100, d = Math.floor(b / 4), e = b % 4, g = Math.floor((8 * b + 13) / 25), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+  const pascoa = `${ano}-${pad2(mes)}-${pad2(dia)}`, f = (md, nome) => [`${ano}-${md}`, nome];
+  return [f('01-01', 'Confraternização Universal'), [addD(pascoa, -48), 'Carnaval (segunda-feira)'], [addD(pascoa, -47), 'Carnaval (terça-feira)'], [addD(pascoa, -2), 'Sexta-feira Santa'], f('04-21', 'Tiradentes'), f('05-01', 'Dia do Trabalho'),
+    [addD(pascoa, 60), 'Corpus Christi'], f('09-07', 'Independência do Brasil'), f('10-12', 'Nossa Senhora Aparecida'), f('11-02', 'Finados'), f('11-15', 'Proclamação da República'), f('11-20', 'Consciência Negra'), f('12-25', 'Natal')];
 }
 
 /* ------------------------------------------------------------------ exportação */
@@ -709,6 +1112,18 @@ document.addEventListener('click', e => {
   else if (act === 'revisar') openForm('revisao', id);
   else if (act === 'editar') openForm('editar', id);
   else if (act === 'arquivar') openArquivar(id);
+  else if (act === 'demanda') openDemanda(id);
+  else if (act === 'ac-view') { S.acv = b.value; renderAc(); }
+  else if (act === 'nova-dem') openDemForm();
+  else if (act === 'editar-dem') openDemForm(id);
+  else if (act === 'mq') openMqForm(id, b.dataset.mq, !!b.dataset.rec);
+  else if (act === 'mq-row-add') { $('#mq-rows').insertAdjacentHTML('beforeend', mqRowHTML()); $('#mq-rows .mq-row:last-child .mq-d').focus(); atualizaPrev(); }
+  else if (act === 'mq-row-del') { b.closest('.mq-row').remove(); atualizaPrev(); }
+  else if (act === 'arq-dem') openArqDem(id);
+  else if (act === 'mover') { const para = b.dataset.para; if (b.dataset.volta || para === 'disponibilizada') openMover(id, para, !!b.dataset.volta); else acaoRapida(id, 'admin_mover_demanda', { p_id: id, p_para: para }, 'Demanda movida para ' + ETN[para] + '.'); }
+  else if (act === 'mq-del') { const por = ($('#q-por') || {}).value; if (!por) { toast('Escolha quem está registrando.'); return; } guard(async () => { try { await rpc('admin_mq_remover', { p_token: S.token, p_mq_id: b.dataset.mq, p_por: por }); await acRefresh(); toast('MQ removido.'); openDemanda(id); } catch (er) { if (er.code === 'nao_autorizado') throw er; toast(er.message); } }); }
+  else if (act === 'del-fer') guard(async () => { await rpc('admin_feriado_remover', { p_token: S.token, p_data: id }); await acRefresh(); toast('Feriado removido.'); });
+  else if (act === 'fer-nac') guard(async () => { for (const [dt, n] of feriadosNacionais(Number(b.dataset.ano))) if (!S.ac.f.some(x => x.data === dt)) await rpc('admin_feriado_salvar', { p_token: S.token, p_data: dt, p_nome: n }); await acRefresh(); toast('Feriados nacionais adicionados.'); });
   else if (act === 'limpar') { S.f = { q: '', de: '', ate: '', exec: '', reg: '', versao: '' }; viewConsultar($('#view')); }
   else if (act === 'sair') { const t = S.token; setToken(null); rpc('admin_logout', { p_token: t }).catch(() => {}); render(); toast('Sessão encerrada.'); }
   else if (act === 'exp-orc' || act === 'exp-aud') guard(() => exportar(act === 'exp-orc' ? 'orc' : 'aud'));
@@ -724,8 +1139,19 @@ document.addEventListener('input', e => {
   else if (id === 'fexec') { S.f.exec = t.value; renderRes(); }
   else if (id === 'freg') { S.f.reg = t.value; renderRes(); }
   else if (id === 'fver') { S.f.versao = t.value; renderRes(); }
+  else if (id.startsWith('acf-')) { S.acf[id.slice(4)] = t.value; renderAc(); }
+  else if (t.closest && t.closest('#demf')) atualizaPrev();
   else if (id === 'hq') { S.h.q = t.value; renderHist(); }
   else if (id === 'hrev') { S.h.soRev = t.checked; renderHist(); }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.classList.contains('pc-sel')) { const p = S.ac.p.find(x => x.id === t.dataset.id); if (p && !acaoRapida(p.demanda_id, 'admin_peca_status', { p_peca_id: p.id, p_status: t.value })) openDemanda(p.demanda_id); }
+  else if (t.classList.contains('el-sel')) { if (!acaoRapida(t.dataset.id, 'admin_demanda_etapa_elab', { p_id: t.dataset.id, p_etapa: t.value })) openDemanda(t.dataset.id); }
+  else if (t.closest && t.closest('#demf') && (['d-nivel', 'd-fim', 'd-obj'].includes(t.id) || t.name === 'dexec')) {
+    const f = t.closest('#demf'), pr = $('#d-prod', f); if (pr.disabled) return;
+    const x = produtoDe($('#d-nivel', f).value, $('#d-fim', f).value, (f.querySelector('input[name="dexec"]:checked') || {}).value, $('#d-obj', f).value); if (x) pr.value = x;
+  }
 });
 document.addEventListener('focusout', e => { if (e.target.id === 'f-valor') { const n = parseBRL(e.target.value); if (!Number.isNaN(n) && e.target.value.trim()) e.target.value = money2(n); } });
 document.addEventListener('toggle', e => {
@@ -734,13 +1160,35 @@ document.addEventListener('toggle', e => {
 }, true);
 document.addEventListener('submit', async e => {
   const f = e.target; e.preventDefault();
-  if (f.dataset.mode) enviarForm(f);
+  if (f.id === 'demf') enviarDem(f);
+  else if (f.id === 'mover') {
+    const msg = $('#m-msg'), por = $('#m-por').value, motivo = $('#m-motivo').value.trim(), orc = ($('#m-orc') || {}).value || null, para = f.dataset.para;
+    if (!por) { msg.innerHTML = '<div class="msg err">Escolha quem está registrando.</div>'; return; }
+    if ($('#m-motivo').required && motivo.length < 3) { msg.innerHTML = '<div class="msg err">Informe o motivo da devolução.</div>'; return; }
+    if (para === 'disponibilizada' && !orc) { msg.innerHTML = '<div class="msg err">Escolha o orçamento registrado.</div>'; return; }
+    loc.set('nomeAdmin', por);
+    guard(async () => { try { await rpc('admin_mover_demanda', { p_token: S.token, p_id: f.dataset.id, p_para: para, p_por: por, p_motivo: motivo || null, p_orcamento_id: orc }); await acRefresh(); toast('Demanda movida para ' + ETN[para] + '.'); openDemanda(f.dataset.id); }
+      catch (er) { if (er.code === 'nao_autorizado') throw er; msg.innerHTML = `<div class="msg err">${esc(er.message)}</div>`; } });
+  } else if (f.id === 'mqf') {
+    const msg = $('#q-msg'), por = $('#q-por').value, disc = $('#q-disc').value.trim(), prazo = $('#q-prazo').value;
+    if (disc.length < 2 || !prazo) { msg.innerHTML = '<div class="msg err">Informe a disciplina e o prazo.</div>'; return; } if (!por) { msg.innerHTML = '<div class="msg err">Escolha quem está registrando.</div>'; return; } loc.set('nomeAdmin', por);
+    guard(async () => { try { await rpc('admin_mq_salvar', { p_token: S.token, p_demanda_id: f.dataset.id, p_mq_id: f.dataset.mq || null, p_disciplina: disc, p_prazo: prazo, p_recebido_em: $('#q-rec').value || null, p_por: por }); await acRefresh(); toast('MQ salvo.'); openDemanda(f.dataset.id); }
+      catch (er) { if (er.code === 'nao_autorizado') throw er; msg.innerHTML = `<div class="msg err">${esc(er.message)}</div>`; } });
+  } else if (f.id === 'arqd') {
+    const msg = $('#ad-msg'), por = $('#ad-por').value, motivo = $('#ad-motivo').value.trim(); if (!por || motivo.length < 3) { msg.innerHTML = '<div class="msg err">Informe o motivo e quem está arquivando.</div>'; return; } loc.set('nomeAdmin', por);
+    guard(async () => { try { await rpc('admin_arquivar_demanda', { p_token: S.token, p_id: f.dataset.id, p_motivo: motivo, p_por: por }); await acRefresh(); dlg().close(); toast('Demanda arquivada.'); }
+      catch (er) { if (er.code === 'nao_autorizado') throw er; msg.innerHTML = `<div class="msg err">${esc(er.message)}</div>`; } });
+  } else if (f.id === 'addfer') {
+    const msg = $('#fer-msg');
+    guard(async () => { try { await rpc('admin_feriado_salvar', { p_token: S.token, p_data: $('#fer-data').value, p_nome: $('#fer-nome').value }); f.reset(); await acRefresh(); toast('Feriado salvo.'); }
+      catch (er) { if (er.code === 'nao_autorizado') throw er; msg.innerHTML = `<div class="msg err">${esc(er.message)}</div>`; } });
+  } else if (f.dataset.mode) enviarForm(f);
   else if (f.id === 'gate') {
     const msg = $('#gate-msg'), btn = $('button', f), senha = $('#csenha').value; btn.disabled = true; msg.innerHTML = '';
     try {
       const d = await Remote.entrar(senha);
       if (d === null) msg.innerHTML = '<div class="msg err">Senha de consulta incorreta.</div>';
-      else { S.cs = senha; ses.set('cs', senha); S.sig = ''; S.resp = d.responsaveis; aplicar(d.orcamentos); S.loaded = true; S.loadError = ''; route(); }
+      else { S.cs = senha; ses.set('cs', senha); S.sig = ''; S.resp = d.responsaveis; aplicar(d.orcamentos); S.loaded = true; S.loadError = ''; route(); carregarAc().catch(() => {}); }
     } catch (er) { msg.innerHTML = `<div class="msg err">${esc(er.message)}</div>`; }
     btn.disabled = false;
   } else if (f.id === 'trocaconsulta') {
